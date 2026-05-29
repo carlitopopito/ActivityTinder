@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aktivitäten-Matcher</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f5f5f0; min-height: 100vh; }
+
+  .app { max-width: 420px; margin: 0 auto; padding: 1rem; }
+
+  .header { text-align: center; margin-bottom: 1.5rem; }
+  .header h1 { font-size: 20px; font-weight: 500; }
+  .header p { font-size: 13px; color: #666; margin-top: 4px; }
+
+  /* --- Spieler-Auswahl --- */
+  .player-select { display: flex; gap: 8px; margin-bottom: 1.5rem; }
+  .player-btn {
+    flex: 1; padding: 10px;
+    border-radius: 8px; border: 1px solid #ddd;
+    background: white; font-size: 14px; cursor: pointer;
+  }
+  .player-btn.active {
+    background: #EEEDFE; border-color: #534AB7;
+    color: #3C3489; font-weight: 500;
+  }
+
+  /* --- Karte --- */
+  .card-stack { position: relative; height: 260px; margin-bottom: 1.5rem; }
+  .activity-card {
+    position: absolute; inset: 0;
+    background: white; border: 1px solid #e5e5e5;
+    border-radius: 16px; padding: 2rem 1.5rem;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    transition: transform 0.35s ease, opacity 0.35s ease;
+  }
+  .activity-card .emoji { font-size: 48px; margin-bottom: 1rem; }
+  .activity-card .name { font-size: 20px; font-weight: 500; }
+  .activity-card .cat-badge {
+    font-size: 11px; padding: 2px 8px;
+    border-radius: 20px; margin-top: 6px;
+    background: #f0f0f0; color: #555;
+  }
+  .activity-card .desc { font-size: 13px; color: #666; margin-top: 6px; }
+  .activity-card .cost { font-size: 12px; color: #888; margin-top: 4px; }
+  .card-shadow {
+    position: absolute; inset: 8px -4px -6px;
+    background: #e8e8e0; border-radius: 16px; z-index: -1;
+  }
+  .slide-out-left  { transform: translateX(-120%) rotate(-12deg); opacity: 0; }
+  .slide-out-right { transform: translateX(120%)  rotate( 12deg); opacity: 0; }
+
+  /* --- Abstimmungs-Buttons --- */
+  .vote-btns { display: flex; gap: 12px; margin-bottom: 1.5rem; }
+  .vote-btn {
+    flex: 1; padding: 12px; border-radius: 8px;
+    border: 1px solid #ddd; background: white;
+    font-size: 15px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all 0.15s;
+  }
+  .vote-btn:active { transform: scale(0.97); }
+  .vote-btn.nein:hover { background: #FAECE7; border-color: #D85A30; color: #993C1D; }
+  .vote-btn.ja:hover   { background: #E1F5EE; border-color: #1D9E75; color: #0F6E56; }
+
+  /* --- Filter-Panel --- */
+  .filter-panel {
+    background: white; border: 1px solid #e5e5e5;
+    border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;
+  }
+  .filter-panel h3 { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+  .filter-row { margin-bottom: 10px; }
+  .filter-row label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; }
+  .chip-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    padding: 4px 10px; border-radius: 20px; font-size: 12px;
+    border: 1px solid #ddd; background: white; cursor: pointer;
+  }
+  .chip.active { background: #EEEDFE; border-color: #534AB7; color: #3C3489; }
+
+  /* --- Status --- */
+  .status-bar {
+    background: #f5f5f0; border-radius: 8px;
+    padding: 10px 14px; font-size: 13px; color: #666;
+    display: flex; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+
+  /* --- Match-Liste --- */
+  .matches-list { margin-top: 0.5rem; }
+  .match-item {
+    background: #E1F5EE; border: 1px solid #1D9E75;
+    border-radius: 8px; padding: 10px 14px;
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .match-item .mi-emoji { font-size: 22px; }
+  .match-item .mi-name { font-size: 14px; font-weight: 500; color: #085041; }
+  .match-item .mi-tag {
+    font-size: 11px; color: #0F6E56;
+    background: #9FE1CB; padding: 2px 7px;
+    border-radius: 20px; margin-left: auto;
+  }
+
+  .done-msg { text-align: center; padding: 2rem 1rem; color: #666; font-size: 14px; }
+  .done-msg .big { font-size: 40px; margin-bottom: 0.5rem; }
+  .progress { font-size: 12px; color: #888; text-align: right; margin-bottom: 8px; }
+
+  .reset-btn {
+    width: 100%; margin-top: 1rem; padding: 10px;
+    border-radius: 8px; border: 1px solid #ddd;
+    background: transparent; color: #888; font-size: 13px; cursor: pointer;
+  }
+  .reset-btn:hover { background: #f5f5f0; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <h1>🎯 Was machen wir?</h1>
+    <p>Stimmt ab — bei Match wird's euch gemeldet</p>
+  </div>
+
+  <!-- Spieler-Auswahl -->
+  <div class="player-select">
+    <button class="player-btn active" id="btnA" onclick="selectPlayer('A')">👤 Person A</button>
+    <button class="player-btn"        id="btnB" onclick="selectPlayer('B')">👤 Person B</button>
+  </div>
+
+  <!-- Filter -->
+  <div class="filter-panel">
+    <h3>🔍 Filter</h3>
+
+    <div class="filter-row">
+      <label>Kategorie</label>
+      <div class="chip-group" id="filterKategorie"></div>
+    </div>
+
+    <div class="filter-row">
+      <label>Kosten</label>
+      <div class="chip-group" id="filterKosten"></div>
+    </div>
+
+    <div class="filter-row">
+      <label>Wetter</label>
+      <div class="chip-group" id="filterWetter"></div>
+    </div>
+  </div>
+
+  <!-- Haupt-Inhalt -->
+  <div id="mainContent"></div>
+
+</div>
+
+<script>
+
+// ============================================================
+//  AKTIVITÄTEN-LISTE — hier kannst du eigene hinzufügen!
+//
+//  Felder:
+//    name     — Anzeigename
+//    emoji    — großes Icon auf der Karte
+//    desc     — kurze Beschreibung
+//    kategorie — "Essen", "Trinken", "Natur", "Stadt", "Zuhause", "Kultur", "Sport"
+//    kosten   — "kostenlos", "günstig", "mittel", "teuer"
+//    wetter   — "egal", "gutwetter"
+// ============================================================
+const ACTIVITIES = [
+  { name:"Kochen",         emoji:"🍳", desc:"Gemeinsam ein neues Rezept ausprobieren", kategorie:"Zuhause", kosten:"günstig",  wetter:"egal"      },
+  { name:"Brettspiel-Abend",emoji:"🎲",desc:"Strategiespiele oder Partyspiele",        kategorie:"Zuhause", kosten:"kostenlos",wetter:"egal"      },
+  { name:"Film-Abend",     emoji:"🎬", desc:"Auf dem Sofa einen Film schauen",          kategorie:"Zuhause", kosten:"kostenlos",wetter:"egal"      },
+  { name:"Backen",         emoji:"🍰", desc:"Kuchen oder Kekse backen",                 kategorie:"Zuhause", kosten:"günstig",  wetter:"egal"      },
+  { name:"Restaurant",     emoji:"🍽️", desc:"Essen gehen und was Neues probieren",      kategorie:"Essen",   kosten:"mittel",   wetter:"egal"      },
+  { name:"Streetfood",     emoji:"🌮", desc:"Markt oder Streetfood-Festival",           kategorie:"Essen",   kosten:"günstig",  wetter:"gutwetter" },
+  { name:"Frühstücken",    emoji:"☕", desc:"Gemütlich irgendwo brunch-en",             kategorie:"Essen",   kosten:"günstig",  wetter:"egal"      },
+  { name:"Bar-Abend",      emoji:"🍸", desc:"Cocktails oder Bier in einer netten Bar",  kategorie:"Trinken", kosten:"mittel",   wetter:"egal"      },
+  { name:"Weinprobe",      emoji:"🍷", desc:"Weine kennenlernen und genießen",          kategorie:"Trinken", kosten:"mittel",   wetter:"egal"      },
+  { name:"Kaffee & Spaziergang",emoji:"🥐",desc:"Kaffee to go und die Stadt erkunden", kategorie:"Trinken", kosten:"günstig",  wetter:"gutwetter" },
+  { name:"Wandern",        emoji:"🥾", desc:"Raus in die Natur, frische Luft",          kategorie:"Natur",   kosten:"kostenlos",wetter:"gutwetter" },
+  { name:"Picknick",       emoji:"🧺", desc:"Mit Essen raus in den Park",               kategorie:"Natur",   kosten:"günstig",  wetter:"gutwetter" },
+  { name:"Fahrrad fahren", emoji:"🚴", desc:"Eine Radtour in der Gegend",               kategorie:"Natur",   kosten:"kostenlos",wetter:"gutwetter" },
+  { name:"Schwimmen",      emoji:"🏊", desc:"Freibad oder See",                         kategorie:"Natur",   kosten:"günstig",  wetter:"gutwetter" },
+  { name:"Stadtbummel",    emoji:"🛍️", desc:"Schaufenster, Gassen, Plätze entdecken",  kategorie:"Stadt",   kosten:"kostenlos",wetter:"egal"      },
+  { name:"Flohmarkt",      emoji:"🪙", desc:"Schöne Funde entdecken",                  kategorie:"Stadt",   kosten:"günstig",  wetter:"gutwetter" },
+  { name:"Escape Room",    emoji:"🔐", desc:"Rätsel lösen als Team",                    kategorie:"Stadt",   kosten:"teuer",    wetter:"egal"      },
+  { name:"Bowlen",         emoji:"🎳", desc:"Strike nach Strike",                       kategorie:"Stadt",   kosten:"günstig",  wetter:"egal"      },
+  { name:"Karaoke",        emoji:"🎤", desc:"Singen was das Zeug hält",                 kategorie:"Stadt",   kosten:"mittel",   wetter:"egal"      },
+  { name:"Museum",         emoji:"🏛️", desc:"Kunst oder Geschichte erkunden",           kategorie:"Kultur",  kosten:"günstig",  wetter:"egal"      },
+  { name:"Konzert",        emoji:"🎸", desc:"Live-Musik genießen",                      kategorie:"Kultur",  kosten:"teuer",    wetter:"egal"      },
+  { name:"Theater",        emoji:"🎭", desc:"Schauspiel oder Musical",                  kategorie:"Kultur",  kosten:"teuer",    wetter:"egal"      },
+  { name:"Klettern",       emoji:"🧗", desc:"Bouldern oder Kletterhalle",               kategorie:"Sport",   kosten:"mittel",   wetter:"egal"      },
+  { name:"Yoga",           emoji:"🧘", desc:"Gemeinsam dehnen und entspannen",          kategorie:"Sport",   kosten:"kostenlos",wetter:"egal"      },
+  { name:"Minigolf",       emoji:"⛳", desc:"Klassisch, aber immer witzig",             kategorie:"Sport",   kosten:"günstig",  wetter:"gutwetter" },
+];
+
+// ============================================================
+//  FILTER-DEFINITIONEN
+// ============================================================
+const FILTER_OPTIONS = {
+  filterKategorie: ["Alle", "Essen", "Trinken", "Natur", "Stadt", "Zuhause", "Kultur", "Sport"],
+  filterKosten:    ["Alle", "kostenlos", "günstig", "mittel", "teuer"],
+  filterWetter:    ["Alle", "gutwetter", "egal"],
+};
+
+// ============================================================
+//  APP-ZUSTAND
+// ============================================================
+let state = {
+  player: 'A',
+  votes: { A: {}, B: {} },
+  currentIndex: { A: 0, B: 0 },
+  activeFilters: { filterKategorie: "Alle", filterKosten: "Alle", filterWetter: "Alle" },
+  filteredList: [],
+};
+
+// ============================================================
+//  FILTER-CHIPS aufbauen
+// ============================================================
+function buildFilterChips() {
+  Object.entries(FILTER_OPTIONS).forEach(([id, opts]) => {
+    const container = document.getElementById(id);
+    container.innerHTML = opts.map(opt => `
+      <button class="chip ${state.activeFilters[id] === opt ? 'active' : ''}"
+              onclick="setFilter('${id}','${opt}')">
+        ${opt}
+      </button>
+    `).join('');
+  });
+}
+
+function setFilter(id, value) {
+  state.activeFilters[id] = value;
+  // Beim Filterwechsel: Index zurücksetzen für aktiven Spieler
+  // (damit nicht mitten in der alten Liste weitergemacht wird)
+  state.currentIndex[state.player] = 0;
+  state.votes[state.player] = {};
+  applyFilters();
+  buildFilterChips();
+  render();
+}
+
+function applyFilters() {
+  state.filteredList = ACTIVITIES.filter(a => {
+    const okKat   = state.activeFilters.filterKategorie === "Alle" || a.kategorie === state.activeFilters.filterKategorie;
+    const okKost  = state.activeFilters.filterKosten    === "Alle" || a.kosten    === state.activeFilters.filterKosten;
+    const okWett  = state.activeFilters.filterWetter    === "Alle" || a.wetter    === state.activeFilters.filterWetter;
+    return okKat && okKost && okWett;
+  });
+}
+
+// ============================================================
+//  SPIELER-AUSWAHL
+// ============================================================
+function selectPlayer(p) {
+  state.player = p;
+  document.getElementById('btnA').classList.toggle('active', p === 'A');
+  document.getElementById('btnB').classList.toggle('active', p === 'B');
+  render();
+}
+
+// ============================================================
+//  ABSTIMMEN
+// ============================================================
+function vote(val) {
+  const p   = state.player;
+  const idx = state.currentIndex[p];
+  if (idx >= state.filteredList.length) return;
+
+  const act  = state.filteredList[idx];
+  const card = document.getElementById('currentCard');
+  if (card) card.classList.add(val === 'ja' ? 'slide-out-right' : 'slide-out-left');
+
+  setTimeout(() => {
+    state.votes[p][act.name] = val;
+    state.currentIndex[p]++;
+    render();
+  }, 320);
+}
+
+// ============================================================
+//  MATCHES berechnen
+// ============================================================
+function getMatches() {
+  return state.filteredList.filter(a =>
+    state.votes.A[a.name] === 'ja' && state.votes.B[a.name] === 'ja'
+  );
+}
+
+// ============================================================
+//  RENDER
+// ============================================================
+function render() {
+  const p       = state.player;
+  const idx     = state.currentIndex[p];
+  const list    = state.filteredList;
+  const done    = idx >= list.length;
+  const matches = getMatches();
+
+  const jaA = Object.values(state.votes.A).filter(v => v === 'ja').length;
+  const jaB = Object.values(state.votes.B).filter(v => v === 'ja').length;
+
+  let html = '';
+
+  if (list.length === 0) {
+    html += `<div class="done-msg"><div class="big">🔍</div>Keine Aktivitäten für diese Filter.</div>`;
+  } else if (!done) {
+    const act = list[idx];
+    html += `<div class="progress">${idx + 1} / ${list.length}</div>`;
+    html += `
+      <div class="card-stack">
+        <div class="card-shadow"></div>
+        <div class="activity-card" id="currentCard">
+          <div class="emoji">${act.emoji}</div>
+          <div class="name">${act.name}</div>
+          <div class="cat-badge">${act.kategorie} · ${act.kosten} · ${act.wetter}</div>
+          <div class="desc">${act.desc}</div>
+        </div>
+      </div>
+      <div class="vote-btns">
+        <button class="vote-btn nein" onclick="vote('nein')">✗ Nein</button>
+        <button class="vote-btn ja"   onclick="vote('ja')">✓ Ja!</button>
+      </div>`;
+  } else {
+    html += `<div class="done-msg"><div class="big">✅</div>Fertig, ${p === 'A' ? 'Person A' : 'Person B'}!<br>Gib das Handy weiter.</div>`;
+  }
+
+  html += `
+    <div class="status-bar">
+      <span>👤 A: ${jaA} Ja / ${state.currentIndex.A} bewertet</span>
+      <span>👤 B: ${jaB} Ja / ${state.currentIndex.B} bewertet</span>
+    </div>`;
+
+  if (matches.length > 0) {
+    html += `<div class="matches-list">`;
+    matches.forEach(m => {
+      html += `
+        <div class="match-item">
+          <span class="mi-emoji">${m.emoji}</span>
+          <span class="mi-name">${m.name}</span>
+          <span class="mi-tag">🎉 Match!</span>
+        </div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `<button class="reset-btn" onclick="resetAll()">↺ Neu starten</button>`;
+
+  document.getElementById('mainContent').innerHTML = html;
+}
+
+// ============================================================
+//  RESET
+// ============================================================
+function resetAll() {
+  state.votes = { A: {}, B: {} };
+  state.currentIndex = { A: 0, B: 0 };
+  applyFilters();
+  render();
+}
+
+// ============================================================
+//  START
+// ============================================================
+applyFilters();
+buildFilterChips();
+render();
+
+</script>
+</body>
+</html>
